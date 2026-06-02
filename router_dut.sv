@@ -172,7 +172,8 @@ module router_dut (
 
   function automatic bit is_packet_not_ok(const ref logic [7:0] pkt[$]);
     if (pkt.size() < 12 || pkt.size() > 2000) begin
-      pkt_len_dropped_count++; //Drop the packet as its not satisfying minimum or maximux size of packet
+      pkt_len_dropped_count++;
+      //Drop the packet as its not satisfying minimum or maximux size of packet
       if ($test$plusargs("dut_debug")) begin
         $display("[DUT_ERROR] Packet %0d Dropped in DUT due to size mismatch at time=%0t",
                  total_inp_pkt_count, $time);
