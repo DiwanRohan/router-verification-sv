@@ -67,7 +67,8 @@ module router_dut (
                 inp_pkt.size(),
                 $time
             );
-        end else begin
+        end
+        else begin
           total_inp_pkt_count++;
           pkt_corrupt_dropped_count++;
           if ($test$plusargs("dut_debug"))
