@@ -51,15 +51,14 @@ interface router_if #(
     inp_valid |=> busy;
   endproperty
   ap_busy_rise: assert property(p_busy_rise)
-    else $error("[SVA ERROR] busy failed to rise after inp_valid");
+  else $error("[SVA ERROR] busy failed to rise after inp_valid");
 
   // SVA: Assert that busy falls eventually (no hang)
   property p_busy_falls;
     @(posedge clk) disable iff (reset)
     busy |-> s_eventually !busy;
   endproperty
-  ap_busy_falls: assert property(p_busy_falls)
-    else $error("[SVA ERROR] busy hung high");
+  ap_busy_falls: assert property(p_busy_falls) else $error("[SVA ERROR] busy hung high");
 
   // SVA: Assert that when outp_valid is high, output data contains no X or Z
   generate
@@ -69,7 +68,7 @@ interface router_if #(
         outp_valid[i] |-> !$isunknown(dut_outp[i]);
       endproperty
       ap_outp_stable: assert property(p_outp_stable)
-        else $error("[SVA ERROR] Invalid output data on port %0d", i);
+      else $error("[SVA ERROR] Invalid output data on port %0d", i);
     end
   endgenerate
 
