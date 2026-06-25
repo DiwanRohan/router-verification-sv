@@ -49,7 +49,7 @@ class environment #(
       mon_out[i] = new(mbx_oMon_scb[i], vif_mon_out, i);
     end
 
-    scb          = new(mbx_iMon_scb, mbx_oMon_scb);
+    scb          = new(mbx_iMon_scb, mbx_oMon_scb, vif_mon_in);
     $display("[Environment] build ended at time=%0t", $time);
   endfunction
 

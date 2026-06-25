@@ -1,16 +1,19 @@
-module router_dut (
+module router_dut #(
+    parameter int DATA_WIDTH = 8,
+    parameter int NUM_PORTS  = 4
+) (
     input clk,
     input reset,
-    input [7:0] dut_inp,
+    input [DATA_WIDTH-1:0] dut_inp,
     input inp_valid,
-    output reg [7:0] dut_outp0, dut_outp1, dut_outp2, dut_outp3,
-    output reg outp_valid0, outp_valid1, outp_valid2, outp_valid3,
+    output reg [DATA_WIDTH-1:0] dut_outp[NUM_PORTS],
+    output reg outp_valid[NUM_PORTS],
     output reg busy,
     output reg [3:0] error
 );
 
   // Internal memory buffer
-  reg [7:0] memory [2048];
+  reg [DATA_WIDTH-1:0] memory [2048];
   reg [11:0] wr_ptr;
   reg [11:0] rd_ptr;
   reg [11:0] pkt_size;
@@ -29,8 +32,8 @@ module router_dut (
   // Temp variables (blocking assignment targets for same-cycle evaluation)
   reg [31:0] len_recv;
   reg [31:0] crc_recv;
-  reg [7:0]  crc_sum;
-  reg [7:0]  da_recv;
+  reg [DATA_WIDTH-1:0]  crc_sum;
+  reg [DATA_WIDTH-1:0]  da_recv;
 
   bit debug_enable;
   initial begin
@@ -50,14 +53,14 @@ module router_dut (
   reg [31:0] pkt_corrupt_dropped_count;
 
   // Protocol check
-  reg error_protocol;
+  logic error_protocol;
 
   // Protocol assertion simulation equivalent
-  always @(inp_valid or dut_inp) begin
+  always_comb begin
     if (busy && (state != RECEIVE) && inp_valid) begin
-      error_protocol <= 1;
+      error_protocol = 1;
     end else begin
-      error_protocol <= 0;
+      error_protocol = 0;
     end
   end
 
@@ -70,14 +73,10 @@ module router_dut (
       pkt_size <= 0;
       busy <= 0;
       error <= 0;
-      dut_outp0 <= 8'hzz;
-      dut_outp1 <= 8'hzz;
-      dut_outp2 <= 8'hzz;
-      dut_outp3 <= 8'hzz;
-      outp_valid0 <= 0;
-      outp_valid1 <= 0;
-      outp_valid2 <= 0;
-      outp_valid3 <= 0;
+      foreach (dut_outp[i]) begin
+        dut_outp[i] <= 0;
+        outp_valid[i] <= 0;
+      end
       crc_sum <= 0;
       total_inp_pkt_count <= 0;
       total_outp_pkt_count <= 0;
@@ -87,6 +86,7 @@ module router_dut (
     end else begin
       if (error_protocol) begin
         error <= 1;
+        state <= ERROR;
       end else begin
         case (state)
           IDLE: begin
@@ -94,14 +94,10 @@ module router_dut (
             wr_ptr <= 0;
             rd_ptr <= 0;
             pkt_size <= 0;
-            dut_outp0 <= 8'hzz;
-            dut_outp1 <= 8'hzz;
-            dut_outp2 <= 8'hzz;
-            dut_outp3 <= 8'hzz;
-            outp_valid0 <= 0;
-            outp_valid1 <= 0;
-            outp_valid2 <= 0;
-            outp_valid3 <= 0;
+            foreach (dut_outp[i]) begin
+              dut_outp[i] <= 0;
+              outp_valid[i] <= 0;
+            end
             crc_sum <= 0;
             error <= 0;
 
@@ -135,7 +131,8 @@ module router_dut (
           end
 
           CHECK: begin
-            // Use blocking assignments to read fields immediately for evaluation in same clock cycle
+            // Use blocking assignments to read fields immediately for evaluation
+            // in the same clock cycle
             len_recv = {memory[5], memory[4], memory[3], memory[2]};
             da_recv  = memory[1];
             crc_recv = {memory[9], memory[8], memory[7], memory[6]};
@@ -165,16 +162,16 @@ module router_dut (
                 total_inp_pkt_count, pkt_size, len_recv, $time);
               end
               state <= ERROR;
-            end else if (crc_sum != crc_recv[7:0]) begin
+            end else if (crc_sum != crc_recv[DATA_WIDTH-1:0]) begin
               error <= 2;
               crc_dropped_count <= crc_dropped_count + 1;
               if (debug_enable) begin
                 $display("[DUT ERROR] Packet %0d CRC mismatch: calc=%0d, received=%0d at time=%0t",
-                         total_inp_pkt_count, crc_sum, crc_recv[7:0], $time);
+                         total_inp_pkt_count, crc_sum, crc_recv[DATA_WIDTH-1:0], $time);
               end
               state <= ERROR;
-            end else if (da_recv > 3) begin
-              error <= 6; // Custom error code 6: Invalid destination port index > 3
+            end else if (da_recv >= NUM_PORTS) begin
+              error <= 6; // Custom error code 6: Invalid destination port index >= NUM_PORTS
               if (debug_enable) begin
                 $display("[DUT ERROR] Packet %0d invalid dest address=%0d at time=%0t",
                          total_inp_pkt_count, da_recv, $time);
@@ -192,28 +189,20 @@ module router_dut (
 
           TRANSMIT: begin
             if (rd_ptr < pkt_size) begin
-              case (da_recv)
-                8'd0: begin dut_outp0 <= memory[rd_ptr]; outp_valid0 <= 1; end
-                8'd1: begin dut_outp1 <= memory[rd_ptr]; outp_valid1 <= 1; end
-                8'd2: begin dut_outp2 <= memory[rd_ptr]; outp_valid2 <= 1; end
-                8'd3: begin dut_outp3 <= memory[rd_ptr]; outp_valid3 <= 1; end
-                default: begin
-                  dut_outp0 <= 8'hzz; outp_valid0 <= 0;
-                  dut_outp1 <= 8'hzz; outp_valid1 <= 0;
-                  dut_outp2 <= 8'hzz; outp_valid2 <= 0;
-                  dut_outp3 <= 8'hzz; outp_valid3 <= 0;
-                end
-              endcase
+              if (da_recv < NUM_PORTS) begin
+                dut_outp[da_recv] <= memory[rd_ptr];
+                outp_valid[da_recv] <= 1;
+              end
               if (debug_enable) begin
-                $strobe("[DUT Output] port=%0d byte=%0d data=%0d time=%0t",
+                $display("[DUT Output] port=%0d byte=%0d data=%0d time=%0t",
                         da_recv, rd_ptr, memory[rd_ptr], $time);
               end
               rd_ptr <= rd_ptr + 1;
             end else begin
-              dut_outp0 <= 8'hzz; outp_valid0 <= 0;
-              dut_outp1 <= 8'hzz; outp_valid1 <= 0;
-              dut_outp2 <= 8'hzz; outp_valid2 <= 0;
-              dut_outp3 <= 8'hzz; outp_valid3 <= 0;
+              foreach (dut_outp[i]) begin
+                dut_outp[i] <= 0;
+                outp_valid[i] <= 0;
+              end
               busy <= 0;
               total_outp_pkt_count <= total_outp_pkt_count + 1;
               state <= IDLE;

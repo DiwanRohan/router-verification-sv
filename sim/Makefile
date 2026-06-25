@@ -19,6 +19,7 @@ INC_DIRS = +incdir+$(TB_DIR)/env +incdir+$(TB_DIR)/tests
 RTL_SRC = $(RTL_DIR)/router_dut.sv
 TB_IF   = $(TB_DIR)/env/router_if.sv
 TB_PKG  = $(TB_DIR)/env/router_pkg.sv
+TB_TEST = $(TB_DIR)/tests/test_pkg.sv
 TB_TOP  = $(TB_DIR)/top/top.sv
 
 # Simulation options
@@ -32,7 +33,7 @@ lib:
 	$(VLIB) work
 
 compile:
-	$(VLOG) -cover sbcef $(INC_DIRS) $(TB_IF) $(TB_PKG) $(RTL_SRC) $(TB_TOP)
+	$(VLOG) -cover sbcef $(INC_DIRS) $(TB_IF) $(TB_PKG) $(TB_TEST) $(RTL_SRC) $(TB_TOP)
 
 sim:
 	$(VSIM) -c $(VSIM_OPTS) -do "coverage save -onexit sim_cov.ucdb; run -all; quit -f" work.top

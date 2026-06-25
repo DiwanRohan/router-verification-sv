@@ -16,6 +16,11 @@ class packet #(
   bit [31:0] crc;
   rand bit [DATA_WIDTH-1:0] payload[];
 
+  // Error injection controls
+  rand bit corrupt_crc;
+  rand bit corrupt_len;
+  rand bit corrupt_da;
+
   bit [DATA_WIDTH-1:0] inp_stream[$];
   bit [DATA_WIDTH-1:0] outp_stream[$];
   int i;
@@ -34,13 +39,19 @@ class packet #(
   endfunction
 
   function void print();
-    $display("[Packet Print] Sa=%0d Da=%0d Len=%0d Crc=%0d", sa, da, len, crc);
+    $display("[Packet Print] Sa=%0d Da=%0d Len=%0d Crc=%0d err_crc=%0b err_len=%0b err_da=%0b",
+             sa, da, len, crc, corrupt_crc, corrupt_len, corrupt_da);
     $display("payload=%0p", payload);
   endfunction
 
   constraint valid_c {
     sa inside {[0 : NUM_PORTS-1]};
-    da inside {[0 : NUM_PORTS-1]};
+
+    if (corrupt_da) {
+      da == NUM_PORTS;
+    } else {
+      da inside {[0 : NUM_PORTS-1]};
+    }
 
     payload.size() inside {[0 : 2000]};
 
@@ -57,10 +68,25 @@ class packet #(
     foreach (payload[i]) payload[i] inside {[0 : (1<<DATA_WIDTH)-1]};
   }
 
+  constraint error_c {
+    corrupt_crc dist {0 := 95, 1 := 5};
+    corrupt_len dist {0 := 95, 1 := 5};
+    corrupt_da  dist {0 := 95, 1 := 5};
+  }
+
   function void post_randomize();
     // 2 is sa and da elements (1 each). 2 * WordSize is len and crc elements.
     len = payload.size() + 2 + 2 * WordSize;
     crc = payload.sum();
+
+    if (corrupt_crc) begin
+      crc = crc + 1;
+    end
+
+    if (corrupt_len) begin
+      len = len + 5;
+    end
+
     this.pack(inp_stream);
   endfunction
 
@@ -74,6 +100,9 @@ class packet #(
     this.len = rhs.len;
     this.crc = rhs.crc;
     this.payload = rhs.payload;
+    this.corrupt_crc = rhs.corrupt_crc;
+    this.corrupt_len = rhs.corrupt_len;
+    this.corrupt_da = rhs.corrupt_da;
     this.inp_stream = rhs.inp_stream;
   endfunction
 

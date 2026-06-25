@@ -32,6 +32,17 @@ class iMonitor #(
           pkt.unpack(inp_q);
           pkt.inp_stream = inp_q;
 
+          // Detect corruptions from the monitored stream
+          if (pkt.crc[DATA_WIDTH-1:0] != pkt.payload.sum()) begin
+            pkt.corrupt_crc = 1;
+          end
+          if (inp_q.size() != pkt.len) begin
+            pkt.corrupt_len = 1;
+          end
+          if (pkt.da >= NUM_PORTS) begin
+            pkt.corrupt_da = 1;
+          end
+
           mbx.put(pkt);
           mbx_cov.put(pkt);
 

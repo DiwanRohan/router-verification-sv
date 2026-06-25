@@ -8,5 +8,4 @@ package router_pkg;
   `include "scoreboard.sv"
   `include "coverage.sv"
   `include "environment.sv"
-  `include "../tests/test.sv"
 endpackage
