@@ -4,7 +4,6 @@ typedef enum {
   STIMULUS
 } pkt_type_t;
 
-
 class packet;
   rand bit [7:0] sa;
   rand bit [7:0] da;
@@ -29,18 +28,26 @@ class packet;
 
   function void print();
     $display("[Packet Print] Sa=%0d Da=%0d Len=%0d Crc=%0d", sa, da, len, crc);
-
     $display("payload=%0p", payload);
   endfunction
 
   constraint valid_c {
-    sa inside {[1 : 8]};
-    da inside {[1 : 8]};
+    sa inside {[0 : 3]};
+    da inside {[0 : 3]};
 
-    payload.size() inside {[2 : 19]};
+    payload.size() inside {[0 : 2000]};
+
+    // Distribute sizes to hit all coverage bins reliably
+    payload.size() dist {
+      [0 : 1]       :/ 15,  // short_length (len <= 11)
+      [2 : 40]      :/ 20,  // length_small (len 12..50)
+      [41 : 190]    :/ 20,  // length_medium (len 51..200)
+      [191 : 989]   :/ 20,  // length_big (len 201..999)
+      [990 : 1990]  :/ 20,  // jumbo_pkts (len 1000..2000)
+      [1991 : 2000] :/ 5    // max_length (len >= 2001)
+    };
 
     foreach (payload[i]) payload[i] inside {[0 : 255]};
-
   }
 
   function void post_randomize();
@@ -60,7 +67,6 @@ class packet;
     this.crc = rhs.crc;
     this.payload = rhs.payload;
     this.inp_stream = rhs.inp_stream;
-
   endfunction
 
   function bit compare(packet dut_pkt);
@@ -70,8 +76,6 @@ class packet;
       $display(
           "[Error Compare] input packet (size=%0d) not matching with output packet (size=%0d) ",
           this.inp_stream.size(), dut_pkt.outp_stream.size());
-      $display(
-          "[INFO] check the input with the output packet and check why they are different");
       return 0;
     end
     status = 1;

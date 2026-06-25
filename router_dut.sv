@@ -1,190 +1,235 @@
 module router_dut (
-    clk,
-    reset,
-    dut_inp,
-    inp_valid,
-    dut_outp,
-    outp_valid,
-    busy,
-    error
+    input clk,
+    input reset,
+    input [7:0] dut_inp,
+    input inp_valid,
+    output reg [7:0] dut_outp0, dut_outp1, dut_outp2, dut_outp3,
+    output reg outp_valid0, outp_valid1, outp_valid2, outp_valid3,
+    output reg busy,
+    output reg [3:0] error
 );
-  input clk, reset;
-  input [7:0] dut_inp;
-  input inp_valid;
 
-  output [7:0] dut_outp;
-  output outp_valid;
-  output busy;
-  output [3:0] error;
-  reg [7:0] dut_outp;
-  reg outp_valid, busy;
-  reg   [3:0] error;
-  logic [7:0] inp_pkt[$];
-  bit done, sop;
-  reg [ 7:0] reg_inp;
-  bit [31:0] len_recv;
-  bit [31:0] crc_dropped_count;
-  bit [31:0] pkt_len_dropped_count;
-  bit [31:0] pkt_corrupt_dropped_count;
-  bit [31:0] total_inp_pkt_count;
-  bit [31:0] total_outp_pkt_count;
+  // Internal memory buffer
+  reg [7:0] memory [2048];
+  reg [11:0] wr_ptr;
+  reg [11:0] rd_ptr;
+  reg [11:0] pkt_size;
 
+  // FSM States
+  typedef enum logic [2:0] {
+    IDLE     = 3'b000,
+    RECEIVE  = 3'b001,
+    CHECK    = 3'b010,
+    TRANSMIT = 3'b011,
+    ERROR    = 3'b100
+  } state_t;
+
+  state_t state;
+
+  // Temp variables (blocking assignment targets for same-cycle evaluation)
+  reg [31:0] len_recv;
+  reg [31:0] crc_recv;
+  reg [7:0]  crc_sum;
+  reg [7:0]  da_recv;
+
+  bit debug_enable;
+  initial begin
+    int dummy;
+    if ($value$plusargs("dut_debug=%d", dummy)) begin
+      debug_enable = (dummy != 0);
+    end else begin
+      debug_enable = 0;
+    end
+  end
+
+  // Statistics counters
+  reg [31:0] total_inp_pkt_count;
+  reg [31:0] total_outp_pkt_count;
+  reg [31:0] crc_dropped_count;
+  reg [31:0] pkt_len_dropped_count;
+  reg [31:0] pkt_corrupt_dropped_count;
+
+  // Protocol check
+  reg error_protocol;
+
+  // Protocol assertion simulation equivalent
+  always @(inp_valid or dut_inp) begin
+    if (busy && (state != RECEIVE) && inp_valid) begin
+      error_protocol <= 1;
+    end else begin
+      error_protocol <= 0;
+    end
+  end
+
+  // Synchronous State Machine
   always @(posedge clk or posedge reset) begin
     if (reset) begin
-      busy <= '0;
-      inp_pkt.delete();
-      done <= '0;
-      len_recv <= '0;
-      error <= '0;
-      crc_dropped_count <= '0;
-      pkt_len_dropped_count <= '0;
-      total_inp_pkt_count <= '0;
-      total_outp_pkt_count <= '0;
-      pkt_corrupt_dropped_count <= '0;
-      outp_valid <= '0;
-      dut_outp <= 'z;
-      sop <= 0;
-      reg_inp <= '0;
-    end else if (inp_valid) begin
-      reg_inp <= dut_inp;
-      sop <= 1;
-    end else sop <= 0;
-  end  //end_of_always
+      state <= IDLE;
+      wr_ptr <= 0;
+      rd_ptr <= 0;
+      pkt_size <= 0;
+      busy <= 0;
+      error <= 0;
+      dut_outp0 <= 8'hzz;
+      dut_outp1 <= 8'hzz;
+      dut_outp2 <= 8'hzz;
+      dut_outp3 <= 8'hzz;
+      outp_valid0 <= 0;
+      outp_valid1 <= 0;
+      outp_valid2 <= 0;
+      outp_valid3 <= 0;
+      crc_sum <= 0;
+      total_inp_pkt_count <= 0;
+      total_outp_pkt_count <= 0;
+      crc_dropped_count <= 0;
+      pkt_len_dropped_count <= 0;
+      pkt_corrupt_dropped_count <= 0;
+    end else begin
+      if (error_protocol) begin
+        error <= 1;
+      end else begin
+        case (state)
+          IDLE: begin
+            busy <= 0;
+            wr_ptr <= 0;
+            rd_ptr <= 0;
+            pkt_size <= 0;
+            dut_outp0 <= 8'hzz;
+            dut_outp1 <= 8'hzz;
+            dut_outp2 <= 8'hzz;
+            dut_outp3 <= 8'hzz;
+            outp_valid0 <= 0;
+            outp_valid1 <= 0;
+            outp_valid2 <= 0;
+            outp_valid3 <= 0;
+            crc_sum <= 0;
+            error <= 0;
 
-  always @(posedge sop) begin
-    error <= '0;  //clear the error status
-    inp_pkt.push_back(reg_inp);
-    while (1) begin
-      @(posedge clk);
-      if (inp_valid == 0) begin
-        len_recv = {inp_pkt[5], inp_pkt[4], inp_pkt[3], inp_pkt[2]};
-        if (inp_pkt.size() == len_recv) begin
-          total_inp_pkt_count++;
-          if ($test$plusargs("dut_debug"))
-            $display(
-                "[DUT Input] Packet %0d collected size=%0d time=%0t",
-                total_inp_pkt_count,
-                inp_pkt.size(),
-                $time
-            );
-        end
-        else begin
-          total_inp_pkt_count++;
-          pkt_corrupt_dropped_count++;
-          if ($test$plusargs("dut_debug"))
-            $display(
-                "[DUT LEN Error] Packet %0d Dropped in DUT due to Length Mismatch time=%0t",
-                total_inp_pkt_count,
-                $time
-            );
+            if (inp_valid) begin
+              memory[0] <= dut_inp;
+              wr_ptr <= 1;
+              busy <= 1;
+              state <= RECEIVE;
+            end
+          end
 
-          error <= 5;
-          inp_pkt.delete();
-          done <= 0;
-          busy <= 0;
-          break;
-        end  //Len_Check_ends
+          RECEIVE: begin
+            if (inp_valid) begin
+              if (wr_ptr < 2048) begin
+                memory[wr_ptr] <= dut_inp;
+                wr_ptr <= wr_ptr + 1;
+                if (wr_ptr >= 10) begin
+                  crc_sum <= crc_sum + dut_inp;
+                end
+              end else begin
+                // Buffer Overflow
+                error <= 4;
+                pkt_len_dropped_count <= pkt_len_dropped_count + 1;
+                state <= ERROR;
+              end
+            end else begin
+              pkt_size <= wr_ptr;
+              total_inp_pkt_count <= total_inp_pkt_count + 1;
+              state <= CHECK;
+            end
+          end
 
-        if (is_packet_not_ok(inp_pkt)) begin
-          inp_pkt.delete();
-          done <= 0;
-          busy <= 0;
-          break;  //drop the packet as size criteria not matching
-        end
-        if (calc_crc(inp_pkt)) begin
-          busy <= 1;
-          done <= 1;
-          break;
-        end//end_of_crc_if
-        else begin
-          crc_dropped_count++;
-          if ($test$plusargs("dut_debug"))
-            $display(
-                "[DUT CRC] Packet %0d Dropped in DUT due to CRC Mismatch time=%0t",
-                total_inp_pkt_count,
-                $time
-            );
-          error <= 2;  //CRC mismatch
-          inp_pkt.delete();
-          done <= 0;
-          busy <= 0;
-          break;
-        end
-      end  //end_of_if_inp_valid_0_Check
-      inp_pkt.push_back(dut_inp);
-      if ($test$plusargs("dut_debug")) $display("[DUT Input] dut_inp=%0d time=%0t", dut_inp, $time);
-    end  //end_of_while
-    sop <= 0;
-    len_recv <= 0;
-    reg_inp <= '0;
-  end  //end_of_always
+          CHECK: begin
+            // Use blocking assignments to read fields immediately for evaluation in same clock cycle
+            len_recv = {memory[5], memory[4], memory[3], memory[2]};
+            da_recv  = memory[1];
+            crc_recv = {memory[9], memory[8], memory[7], memory[6]};
 
-  always @(posedge clk) begin
-    while (done == 1 && error == 0) begin
-      @(posedge clk);
-      dut_outp   <= inp_pkt.pop_front();
-      outp_valid <= 1;
-      if ($test$plusargs("dut_debug"))
-        $strobe("[DUT Output] dut_outp=%0d time=%0t", dut_outp, $time);
-      if (inp_pkt.size() == 0) begin
-        total_outp_pkt_count++;
-        if ($test$plusargs("dut_debug"))
-          $display(
-              "[DUT Output] Total Packet %0d Driving completed at time=%0t ",
-              total_outp_pkt_count,
-              $time
-          );
-        done <= 0;
-        busy <= 0;
-        @(posedge clk);
-        dut_outp   <= 'z;
-        outp_valid <= 1'b0;
-        //break;
-      end  //end_of_if;
-    end  //end_of_while
-  end
+            if (pkt_size < 12) begin
+              error <= 3;
+              pkt_len_dropped_count <= pkt_len_dropped_count + 1;
+              if (debug_enable) begin
+                $display("[DUT ERROR] Packet %0d too short (size=%0d) at time=%0t",
+                         total_inp_pkt_count, pkt_size, $time);
+              end
+              state <= ERROR;
+            end else if (pkt_size > 2000) begin
+              error <= 4;
+              pkt_len_dropped_count <= pkt_len_dropped_count + 1;
+              if (debug_enable) begin
+                $display("[DUT ERROR] Packet %0d too long (size=%0d) at time=%0t",
+                         total_inp_pkt_count, pkt_size, $time);
+              end
+              state <= ERROR;
+            end else if (pkt_size != len_recv) begin
+              error <= 5;
+              pkt_corrupt_dropped_count <= pkt_corrupt_dropped_count + 1;
+              if (debug_enable) begin
+                $display(
+                "[DUT ERROR] Packet %0d length mismatch: pkt_size=%0d, len_recv=%0d at time=%0t",
+                total_inp_pkt_count, pkt_size, len_recv, $time);
+              end
+              state <= ERROR;
+            end else if (crc_sum != crc_recv[7:0]) begin
+              error <= 2;
+              crc_dropped_count <= crc_dropped_count + 1;
+              if (debug_enable) begin
+                $display("[DUT ERROR] Packet %0d CRC mismatch: calc=%0d, received=%0d at time=%0t",
+                         total_inp_pkt_count, crc_sum, crc_recv[7:0], $time);
+              end
+              state <= ERROR;
+            end else if (da_recv > 3) begin
+              error <= 6; // Custom error code 6: Invalid destination port index > 3
+              if (debug_enable) begin
+                $display("[DUT ERROR] Packet %0d invalid dest address=%0d at time=%0t",
+                         total_inp_pkt_count, da_recv, $time);
+              end
+              state <= ERROR;
+            end else begin
+              error <= 0;
+              state <= TRANSMIT;
+              if (debug_enable) begin
+                $display("[DUT Input] Packet %0d collected size=%0d dest=%0d time=%0t",
+                         total_inp_pkt_count, pkt_size, da_recv, $time);
+              end
+            end
+          end
 
-  always @(inp_valid or dut_inp) begin
-    if (!$isunknown(dut_inp) && busy) begin
-      if ($test$plusargs("dut_debug")) begin
-        $display("[DUT Protocol ERROR] *************************************");
-        $display("[DUT Protocol] Protocol violation detected at time=%0t", $time);
-        $display("[DUT Protocol] inp_valid or dut_inp changed while router is busy at time=%0t",
-                 $time);
-        $display("[DUT Protocol ERROR] *************************************");
+          TRANSMIT: begin
+            if (rd_ptr < pkt_size) begin
+              case (da_recv)
+                8'd0: begin dut_outp0 <= memory[rd_ptr]; outp_valid0 <= 1; end
+                8'd1: begin dut_outp1 <= memory[rd_ptr]; outp_valid1 <= 1; end
+                8'd2: begin dut_outp2 <= memory[rd_ptr]; outp_valid2 <= 1; end
+                8'd3: begin dut_outp3 <= memory[rd_ptr]; outp_valid3 <= 1; end
+                default: begin
+                  dut_outp0 <= 8'hzz; outp_valid0 <= 0;
+                  dut_outp1 <= 8'hzz; outp_valid1 <= 0;
+                  dut_outp2 <= 8'hzz; outp_valid2 <= 0;
+                  dut_outp3 <= 8'hzz; outp_valid3 <= 0;
+                end
+              endcase
+              if (debug_enable) begin
+                $strobe("[DUT Output] port=%0d byte=%0d data=%0d time=%0t",
+                        da_recv, rd_ptr, memory[rd_ptr], $time);
+              end
+              rd_ptr <= rd_ptr + 1;
+            end else begin
+              dut_outp0 <= 8'hzz; outp_valid0 <= 0;
+              dut_outp1 <= 8'hzz; outp_valid1 <= 0;
+              dut_outp2 <= 8'hzz; outp_valid2 <= 0;
+              dut_outp3 <= 8'hzz; outp_valid3 <= 0;
+              busy <= 0;
+              total_outp_pkt_count <= total_outp_pkt_count + 1;
+              state <= IDLE;
+            end
+          end
+
+          ERROR: begin
+            busy <= 0;
+            state <= IDLE;
+          end
+
+          default: begin
+            state <= IDLE;
+          end
+        endcase
       end
-      error <= 1;
-    end else error <= 0;
-  end
-
-  function automatic bit calc_crc(const ref logic [7:0] pkt[$]);
-    bit [31:0] crc, new_crc;
-    bit [7:0] payload[$];
-    crc = {pkt[9], pkt[8], pkt[7], pkt[6]};
-    for (int i = 10; i < pkt.size(); i++) begin
-      payload.push_back(pkt[i]);
     end
-    new_crc = payload.sum();
-    payload.delete();
-    if ($test$plusargs("dut_debug"))
-      $display("[DUT CRC] Received crc=%0d caluclated crc=%0d time=%0t", crc, new_crc, $time);
-    return (crc == new_crc);
-  endfunction
-
-  function automatic bit is_packet_not_ok(const ref logic [7:0] pkt[$]);
-    if (pkt.size() < 12 || pkt.size() > 2000) begin
-      pkt_len_dropped_count++;
-      //Drop the packet as its not satisfying minimum or maximux size of packet
-      if ($test$plusargs("dut_debug")) begin
-        $display("[DUT_ERROR] Packet %0d Dropped in DUT due to size mismatch at time=%0t",
-                 total_inp_pkt_count, $time);
-        $display(
-            "[DUT_ERROR] Received packet size=%0d Bytes, Allowed range 12Bytes ->to-> 2000 Bytes ",
-            pkt.size());
-      end
-      if (pkt.size() < 12) error <= 3;
-      if (pkt.size() > 2000) error <= 4;
-      return 1;
-    end else return 0;
-  endfunction
+  end
 endmodule

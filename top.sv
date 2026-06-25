@@ -1,4 +1,4 @@
-//Section 7:Define interface with clk as input
+// Define interface with clk as input
 interface router_if (
     input clk
 );
@@ -6,14 +6,14 @@ interface router_if (
   logic reset;
   logic [7:0] dut_inp;
   logic inp_valid;
-  logic [7:0] dut_outp;
-  logic outp_valid;
+  logic [7:0] dut_outp[4];
+  logic outp_valid[4];
   logic busy;
   logic [3:0] error;
 
-  //Section 10 :Define the clocking block
+  // Define the clocking block
   clocking cb @(posedge clk);
-    output dut_inp;  //Direction are w.r.t TB
+    output dut_inp;  // Direction is w.r.t TB
     output inp_valid;
     input dut_outp;
     input outp_valid;
@@ -21,7 +21,7 @@ interface router_if (
     input error;
   endclocking
 
-  //Section 11 :Define clocking block for minotrs
+  // Define clocking block for monitors
   clocking mcb @(posedge clk);
     input dut_inp;
     input inp_valid;
@@ -31,49 +31,49 @@ interface router_if (
     input error;
   endclocking
 
-  //Section 9:Define modport for TB Driver
-  //modport tb_mod_port (output reset,dut_inp,inp_valid, input outp_valid,dut_outp,busy,error);
+  // Define modport for TB Driver
   modport tb_mod_port(clocking cb, output reset);
 
-  //Section 12:Define modport for TB Monitors
+  // Define modport for TB Monitors
   modport tb_mon(clocking mcb);
 
 endinterface
 
 module top;
 
-  //Section1: Variables for Port Connections Of DUT and TB.
+  // Clock initialization and Generation
   logic clk;
-
-  //Section2: Clock initiliazation and Generation
   initial clk = 0;
   always #5 clk = !clk;
 
-  //Section 8: Instantiate interface
+  // Instantiate interface
   router_if router_if_inst (clk);
 
-  //Section3:  DUT instantiation
+  // DUT instantiation
   router_dut dut_inst (
       .clk(clk),
       .reset(router_if_inst.reset),
       .dut_inp(router_if_inst.dut_inp),
       .inp_valid(router_if_inst.inp_valid),
-      .dut_outp(router_if_inst.dut_outp),
-      .outp_valid(router_if_inst.outp_valid),
+      .dut_outp0(router_if_inst.dut_outp[0]),
+      .dut_outp1(router_if_inst.dut_outp[1]),
+      .dut_outp2(router_if_inst.dut_outp[2]),
+      .dut_outp3(router_if_inst.dut_outp[3]),
+      .outp_valid0(router_if_inst.outp_valid[0]),
+      .outp_valid1(router_if_inst.outp_valid[1]),
+      .outp_valid2(router_if_inst.outp_valid[2]),
+      .outp_valid3(router_if_inst.outp_valid[3]),
       .busy(router_if_inst.busy),
       .error(router_if_inst.error)
   );
 
-  //Section4:  Program Block (TB) instantiation
+  // Testbench module instantiation
   testbench tb_inst (.vif(router_if_inst));
 
-
-  //Section 6: Dumping Waveform
+  // Dumping Waveform
   initial begin
     $dumpfile("dump.vcd");
     $dumpvars(0, top.dut_inst);
   end
 
 endmodule
-
-

@@ -31,7 +31,9 @@ class generator;
     //Section G.4: Generate NORMAL Stimulus packets
     repeat (pkt_count) begin
       pkt_id++;
-      ref_pkt.randomize();
+      if (!ref_pkt.randomize()) begin
+        $error("[Generator] Randomization failed");
+      end
       gen_pkt = new;
 
       //Section G.4.1: Fill the packet type, this will be used in driver to identify
