@@ -1,13 +1,15 @@
-class generator;
+class generator #(
+    parameter int DATA_WIDTH = `DEFAULT_DATA_WIDTH,
+    parameter int NUM_PORTS  = `DEFAULT_NUM_PORTS
+);
   bit [31:0] pkt_count;
 
   //Section G.1:Define mailbox and packet class handles
-
-  packet ref_pkt;
-  mailbox #(packet) mbx;
+  packet #(DATA_WIDTH, NUM_PORTS) ref_pkt;
+  mailbox #(packet #(DATA_WIDTH, NUM_PORTS)) mbx;
 
   //Section G.2: Define custom constructor with mailbox and packet class handles as arguments
-  function new(input mailbox#(packet) mbx_arg, input bit [31:0] count_arg);
+  function new(input mailbox#(packet #(DATA_WIDTH, NUM_PORTS)) mbx_arg, input bit [31:0] count_arg);
     mbx = mbx_arg;
     pkt_count = count_arg;
     ref_pkt = new();
@@ -15,7 +17,7 @@ class generator;
 
   task run();
     bit [31:0] pkt_id;
-    packet gen_pkt;
+    packet #(DATA_WIDTH, NUM_PORTS) gen_pkt;
 
     //Section G.3: Generate First packet as Reset packet
     gen_pkt = new;

@@ -1,4 +1,5 @@
 package router_pkg;
+  `include "router_defines.sv"
   `include "packet.sv"
   `include "Generator.sv"
   `include "Driver.sv"
@@ -7,5 +8,5 @@ package router_pkg;
   `include "scoreboard.sv"
   `include "coverage.sv"
   `include "environment.sv"
-  `include "test.sv"
+  `include "../tests/test.sv"
 endpackage

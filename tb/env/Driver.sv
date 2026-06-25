@@ -1,19 +1,25 @@
-class driver;
-  packet pkt;
-  virtual router_if.tb_mod_port vif;
-  mailbox #(packet) mbx;
+class driver #(
+    parameter int DATA_WIDTH = `DEFAULT_DATA_WIDTH,
+    parameter int NUM_PORTS  = `DEFAULT_NUM_PORTS
+);
+  packet #(DATA_WIDTH, NUM_PORTS) pkt;
+  virtual router_if #(DATA_WIDTH, NUM_PORTS).tb_mod_port vif;
+  mailbox #(packet #(DATA_WIDTH, NUM_PORTS)) mbx;
 
   bit [31:0] no_of_pkts_recvd;
 
-  function new(input mailbox#(packet) mbx_arg, input virtual router_if.tb_mod_port vif_arg);
+  function new(
+      input mailbox#(packet #(DATA_WIDTH, NUM_PORTS)) mbx_arg,
+      input virtual router_if #(DATA_WIDTH, NUM_PORTS).tb_mod_port vif_arg
+  );
     mbx = mbx_arg;
     vif = vif_arg;
   endfunction
 
   extern task run();
-  extern task drive(packet pkt);
-  extern task drive_reset(packet pkt);
-  extern task drive_stimulus(packet pkt);
+  extern task drive(packet #(DATA_WIDTH, NUM_PORTS) pkt);
+  extern task drive_reset(packet #(DATA_WIDTH, NUM_PORTS) pkt);
+  extern task drive_stimulus(packet #(DATA_WIDTH, NUM_PORTS) pkt);
 endclass
 
 task driver::run();
@@ -29,7 +35,7 @@ task driver::run();
   end
 endtask
 
-task driver::drive(packet pkt);
+task driver::drive(packet #(DATA_WIDTH, NUM_PORTS) pkt);
   case (pkt.kind)
     RESET:    drive_reset(pkt);
     STIMULUS: drive_stimulus(pkt);
@@ -37,7 +43,7 @@ task driver::drive(packet pkt);
   endcase
 endtask
 
-task driver::drive_reset(packet pkt);
+task driver::drive_reset(packet #(DATA_WIDTH, NUM_PORTS) pkt);
   $display("[Driver] Driving Reset transaction at %0t", $time);
   vif.reset <= 1'b1;
   repeat (pkt.reset_cycles) @(vif.cb);
@@ -45,7 +51,7 @@ task driver::drive_reset(packet pkt);
   $display("[Driver] Reset completed at %0t", $time);
 endtask
 
-task driver::drive_stimulus(packet pkt);
+task driver::drive_stimulus(packet #(DATA_WIDTH, NUM_PORTS) pkt);
   wait (vif.cb.busy == 0);
   @(vif.cb);
   $display("[Driver] Driving packet %0d (size=%0d) at %0t", no_of_pkts_recvd, pkt.len, $time);

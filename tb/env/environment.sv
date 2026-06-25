@@ -1,26 +1,32 @@
-class environment;
+class environment #(
+    parameter int DATA_WIDTH = `DEFAULT_DATA_WIDTH,
+    parameter int NUM_PORTS  = `DEFAULT_NUM_PORTS
+);
 
-  generator                            gen;
-  driver                               drvr;
-  iMonitor                             mon_in;
-  oMonitor                             mon_out[4];
-  scoreboard                           scb;
-  coverage                             cov;
+  generator #(DATA_WIDTH, NUM_PORTS)            gen;
+  driver #(DATA_WIDTH, NUM_PORTS)               drvr;
+  iMonitor #(DATA_WIDTH, NUM_PORTS)             mon_in;
+  oMonitor #(DATA_WIDTH, NUM_PORTS)             mon_out[NUM_PORTS];
+  scoreboard #(DATA_WIDTH, NUM_PORTS)           scb;
+  coverage #(DATA_WIDTH, NUM_PORTS)             cov;
 
   bit                           [31:0] no_of_pkts;
 
-  mailbox #(packet)                    gen_drv_mbox;
-  mailbox #(packet)                    mbx_iMon_scb;
-  mailbox #(packet)                    mbx_iMon_cov;
-  mailbox #(packet)                    mbx_oMon_scb[4];
+  mailbox #(packet #(DATA_WIDTH, NUM_PORTS))                    gen_drv_mbox;
+  mailbox #(packet #(DATA_WIDTH, NUM_PORTS))                    mbx_iMon_scb;
+  mailbox #(packet #(DATA_WIDTH, NUM_PORTS))                    mbx_iMon_cov;
+  mailbox #(packet #(DATA_WIDTH, NUM_PORTS))                    mbx_oMon_scb[NUM_PORTS];
 
-  virtual router_if.tb_mod_port        vif;
-  virtual router_if.tb_mon             vif_mon_in;
-  virtual router_if.tb_mon             vif_mon_out;
+  virtual router_if #(DATA_WIDTH, NUM_PORTS).tb_mod_port        vif;
+  virtual router_if #(DATA_WIDTH, NUM_PORTS).tb_mon             vif_mon_in;
+  virtual router_if #(DATA_WIDTH, NUM_PORTS).tb_mon             vif_mon_out;
 
-  function new(input virtual router_if.tb_mod_port vif_in,
-               input virtual router_if.tb_mon vif_mon_in,
-               input virtual router_if.tb_mon vif_mon_out, input bit [31:0] no_of_pkts);
+  function new(
+      input virtual router_if #(DATA_WIDTH, NUM_PORTS).tb_mod_port vif_in,
+      input virtual router_if #(DATA_WIDTH, NUM_PORTS).tb_mon vif_mon_in,
+      input virtual router_if #(DATA_WIDTH, NUM_PORTS).tb_mon vif_mon_out,
+      input bit [31:0] no_of_pkts
+  );
     this.vif = vif_in;
     this.vif_mon_in = vif_mon_in;
     this.vif_mon_out = vif_mon_out;
@@ -38,7 +44,7 @@ class environment;
     mon_in       = new(mbx_iMon_scb, mbx_iMon_cov, vif_mon_in);
     cov          = new(mbx_iMon_cov);
 
-    for (int i = 0; i < 4; i++) begin
+    for (int i = 0; i < NUM_PORTS; i++) begin
       mbx_oMon_scb[i] = new;
       mon_out[i] = new(mbx_oMon_scb[i], vif_mon_out, i);
     end
@@ -50,14 +56,17 @@ class environment;
   task run;
     $display("[Environment] run started at time=%0t", $time);
 
+    for (int i = 0; i < NUM_PORTS; i++) begin
+      automatic int j = i;
+      fork
+        mon_out[j].run();
+      join_none
+    end
+
     fork
       gen.run();
       drvr.run();
       mon_in.run();
-      mon_out[0].run();
-      mon_out[1].run();
-      mon_out[2].run();
-      mon_out[3].run();
       scb.run();
       cov.run();
     join_any
@@ -72,7 +81,7 @@ class environment;
   function void report();
     $display("\n[Environment] ****** Report Started ********** ");
     mon_in.report();
-    for (int i = 0; i < 4; i++) begin
+    for (int i = 0; i < NUM_PORTS; i++) begin
       mon_out[i].report();
     end
     scb.report();

@@ -8,3 +8,7 @@ transcript
 *.str
 *.ucdb
 modelsim.ini
+
+# HTML coverage reports
+cov_html/
+sim/cov_html/

@@ -1,14 +1,22 @@
-class scoreboard;
-  packet ref_pkt;
-  packet got_pkt;
-  mailbox #(packet) mbx_in;
-  mailbox #(packet) mbx_out[4];
+class scoreboard #(
+    parameter int DATA_WIDTH = `DEFAULT_DATA_WIDTH,
+    parameter int NUM_PORTS  = `DEFAULT_NUM_PORTS
+);
+  packet #(DATA_WIDTH, NUM_PORTS) ref_pkt;
+  packet #(DATA_WIDTH, NUM_PORTS) got_pkt;
+  mailbox #(packet #(DATA_WIDTH, NUM_PORTS)) mbx_in;
+  mailbox #(packet #(DATA_WIDTH, NUM_PORTS)) mbx_out[NUM_PORTS];
 
   bit [15:0] total_pkts_recvd;
   bit [15:0] m_matched;
   bit [15:0] m_mismatched;
 
-  function new(input mailbox#(packet) mbx_in, input mailbox#(packet) mbx_out[4]);
+  localparam int WordSize = (32 + DATA_WIDTH - 1) / DATA_WIDTH;
+
+  function new(
+      input mailbox#(packet #(DATA_WIDTH, NUM_PORTS)) mbx_in,
+      input mailbox#(packet #(DATA_WIDTH, NUM_PORTS)) mbx_out[NUM_PORTS]
+  );
     this.mbx_in  = mbx_in;
     this.mbx_out = mbx_out;
   endfunction
@@ -18,8 +26,9 @@ class scoreboard;
     while (1) begin
       mbx_in.get(ref_pkt);
 
-      // Check if the packet is expected to be dropped by the DUT due to length or routing errors
-      if (ref_pkt.len < 12 || ref_pkt.len > 2000 || ref_pkt.da > 3) begin
+      // min valid length is 2 (sa, da) + 2*WordSize (len, crc) + 2 (min payload elements to not be < 12 in DATA_WIDTH=8)
+      if (ref_pkt.len < (2 + 2 * WordSize + 2) || ref_pkt.len > 2000 ||
+          ref_pkt.da >= NUM_PORTS) begin
         $display(
           "[Scoreboard] Packet %0d expected to be dropped by DUT (len=%0d, da=%0d) at time=%0t",
           total_pkts_recvd + 1, ref_pkt.len, ref_pkt.da, $time);

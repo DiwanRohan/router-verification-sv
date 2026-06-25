@@ -1,14 +1,17 @@
-class oMonitor;
-  packet pkt;
-  virtual router_if.tb_mon vif;
-  mailbox #(packet) mbx;
+class oMonitor #(
+    parameter int DATA_WIDTH = `DEFAULT_DATA_WIDTH,
+    parameter int NUM_PORTS  = `DEFAULT_NUM_PORTS
+);
+  packet #(DATA_WIDTH, NUM_PORTS) pkt;
+  virtual router_if #(DATA_WIDTH, NUM_PORTS).tb_mon vif;
+  mailbox #(packet #(DATA_WIDTH, NUM_PORTS)) mbx;
 
   bit [31:0] no_of_pkts_recvd;
   int port_id;
 
   function new(
-    input mailbox#(packet) mbx_arg,
-    input virtual router_if.tb_mon vif_arg,
+    input mailbox#(packet #(DATA_WIDTH, NUM_PORTS)) mbx_arg,
+    input virtual router_if #(DATA_WIDTH, NUM_PORTS).tb_mon vif_arg,
     input int port_id_arg
   );
     this.mbx = mbx_arg;
@@ -17,7 +20,7 @@ class oMonitor;
   endfunction
 
   task run();
-    bit [7:0] outp_q[$];
+    bit [DATA_WIDTH-1:0] outp_q[$];
     $display("[oMon_%0d] run started at time=%0t ", port_id, $time);
     forever begin
       @(posedge vif.mcb.outp_valid[port_id]);

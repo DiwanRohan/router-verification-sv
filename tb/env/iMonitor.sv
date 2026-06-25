@@ -1,15 +1,18 @@
-class iMonitor;
-  packet pkt;
-  virtual router_if.tb_mon vif;
-  mailbox #(packet) mbx;      // Connected to scoreboard
-  mailbox #(packet) mbx_cov;  // Connected to coverage
+class iMonitor #(
+    parameter int DATA_WIDTH = `DEFAULT_DATA_WIDTH,
+    parameter int NUM_PORTS  = `DEFAULT_NUM_PORTS
+);
+  packet #(DATA_WIDTH, NUM_PORTS) pkt;
+  virtual router_if #(DATA_WIDTH, NUM_PORTS).tb_mon vif;
+  mailbox #(packet #(DATA_WIDTH, NUM_PORTS)) mbx;      // Connected to scoreboard
+  mailbox #(packet #(DATA_WIDTH, NUM_PORTS)) mbx_cov;  // Connected to coverage
 
   bit [15:0] no_of_pkts_recvd;
 
   function new(
-    input mailbox#(packet) mbx_arg,
-    input mailbox#(packet) mbx_cov_arg,
-    input virtual router_if.tb_mon vif_arg
+    input mailbox#(packet #(DATA_WIDTH, NUM_PORTS)) mbx_arg,
+    input mailbox#(packet #(DATA_WIDTH, NUM_PORTS)) mbx_cov_arg,
+    input virtual router_if #(DATA_WIDTH, NUM_PORTS).tb_mon vif_arg
   );
     this.mbx = mbx_arg;
     this.mbx_cov = mbx_cov_arg;
@@ -17,7 +20,7 @@ class iMonitor;
   endfunction
 
   task run();
-    bit [7:0] inp_q[$];
+    bit [DATA_WIDTH-1:0] inp_q[$];
     $display("[iMon] run started at time=%0t ", $time);
     forever begin
       @(posedge vif.mcb.inp_valid);

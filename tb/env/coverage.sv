@@ -1,27 +1,27 @@
-class coverage;
-  packet pkt;
-  mailbox #(packet) mbx;
+class coverage #(
+    parameter int DATA_WIDTH = `DEFAULT_DATA_WIDTH,
+    parameter int NUM_PORTS  = `DEFAULT_NUM_PORTS
+);
+  packet #(DATA_WIDTH, NUM_PORTS) pkt;
+  mailbox #(packet #(DATA_WIDTH, NUM_PORTS)) mbx;
   real coverage_score;
 
-  covergroup fcov with function sample (bit [7:0] sa, bit [7:0] da, int len);
+  localparam int WordSize = (32 + DATA_WIDTH - 1) / DATA_WIDTH;
+  localparam int MinValidLen = 2 + 2*WordSize + 2;
+
+  covergroup fcov with function sample (bit [DATA_WIDTH-1:0] sa, bit [DATA_WIDTH-1:0] da, int len);
     coverpoint sa {
-      bins sa0 = {0};
-      bins sa1 = {1};
-      bins sa2 = {2};
-      bins sa3 = {3};
+      bins sa_bins[] = {[0 : NUM_PORTS-1]};
     }
     coverpoint da {
-      bins da0 = {0};
-      bins da1 = {1};
-      bins da2 = {2};
-      bins da3 = {3};
+      bins da_bins[] = {[0 : NUM_PORTS-1]};
     }
     coverpoint len {
-      bins length_small = {[12 : 50]};
+      bins length_small = {[MinValidLen : 50]};
       bins length_medium = {[51 : 200]};
       bins length_big = {[201 : 999]};
       bins jumbo_pkts = {[1000 : 2000]};
-      bins short_length = {[$ : 11]};
+      bins short_length = {[$ : MinValidLen-1]};
       bins max_length = {[2001 : $]};
     }
 
@@ -30,7 +30,7 @@ class coverage;
     cross da, len;
   endgroup
 
-  function new(input mailbox#(packet) mbx_arg);
+  function new(input mailbox#(packet #(DATA_WIDTH, NUM_PORTS)) mbx_arg);
     this.mbx = mbx_arg;
     fcov = new;
   endfunction
